@@ -311,11 +311,12 @@ gboolean         dnf_context_module_enable              (DnfContext * context,
  *
  * Enable modules and mark for installation but do not commit modular changes.
  * To commit modular changes, call dnf_context_run().
- * Returns FALSE when an error is set.
+ * Returns the list of fully resolved modules marked for installation in NSVCA/P
+ * form or NULL when an error is set.
  *
  * Since: 0.63.0
  **/
-gboolean         dnf_context_module_install              (DnfContext * context,
+char**           dnf_context_module_install              (DnfContext * context,
                                                           const char ** module_specs,
                                                           GError ** error);
 

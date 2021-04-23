@@ -3427,7 +3427,7 @@ dnf_context_module_enable(DnfContext * context, const char ** module_specs, GErr
     return TRUE;
 } CATCH_TO_GERROR(FALSE)
 
-gboolean
+char**
 dnf_context_module_install(DnfContext * context, const char ** module_specs, GError ** error) try
 {
     DnfContextPrivate *priv = GET_PRIVATE (context);
@@ -3436,7 +3436,7 @@ dnf_context_module_install(DnfContext * context, const char ** module_specs, GEr
     if (priv->sack == nullptr) {
         dnf_state_reset (priv->state);
         if (!dnf_context_setup_sack(context, priv->state, error)) {
-            return FALSE;
+            return NULL;
         }
     }
 
@@ -3447,9 +3447,11 @@ dnf_context_module_install(DnfContext * context, const char ** module_specs, GEr
     auto container = dnf_sack_get_module_container(sack);
     if (!container) {
         g_set_error_literal(error, DNF_ERROR, DNF_ERROR_FAILED, _("No modular data available"));
-        return FALSE;
+        return NULL;
     }
     std::vector<std::tuple<libdnf::ModulePackageContainer::ModuleErrorType, std::string, std::string>> messages;
+
+    g_autoptr(GPtrArray) resolved = g_ptr_array_new_with_free_func (g_free);
 
     std::vector<std::string> nevras_to_install;
     for (const char ** specs = module_specs; *specs != NULL; ++specs) {
@@ -3481,12 +3483,14 @@ dnf_context_module_install(DnfContext * context, const char ** module_specs, GEr
                         } else {
                             profiles.push_back(modpkg->getDefaultProfile());
                         }
+                        auto nsvca = modpkg->getFullIdentifier();
                         std::set<std::string> pkgnames;
                         for (const auto &profile : profiles) {
                             container->install(modpkg, profile.getName());
                             for (const auto &pkgname : profile.getContent()) {
                                 pkgnames.insert(pkgname);
                             }
+                            g_ptr_array_add (resolved, g_strdup_printf ("%s/%s", nsvca.c_str(), profile.getName().c_str()));
                         }
                         for (const auto &nevra : modpkg->getArtifacts()) {
                             int epoch;
@@ -3495,7 +3499,7 @@ dnf_context_module_install(DnfContext * context, const char ** module_specs, GEr
                                 // this really should never happen; unless the modular repodata is corrupted
                                 g_autofree char *errmsg = g_strdup_printf (_("Failed to parse module artifact NEVRA '%s'"), nevra.c_str());
                                 g_set_error_literal(error, DNF_ERROR, DNF_ERROR_FAILED, errmsg);
-                                return FALSE;
+                                return NULL;
                             }
                             // ignore source packages
                             if (g_str_equal (arch, "src") || g_str_equal (arch, "nosrc"))
@@ -3528,15 +3532,16 @@ dnf_context_module_install(DnfContext * context, const char ** module_specs, GEr
     bool return_error = report_problems(messages);
     if (return_error) {
         g_set_error_literal(error, DNF_ERROR, DNF_ERROR_FAILED, _("Problems appeared for module install request"));
-        return FALSE;
+        return NULL;
     } else {
         for (const auto &nevra : nevras_to_install) {
             if (!dnf_context_install (context, nevra.c_str(), error))
-              return FALSE;
+              return NULL;
         }
+        g_ptr_array_add (resolved, NULL);
+        return (char**)g_ptr_array_free ((GPtrArray*)g_steal_pointer (&resolved), FALSE);
     }
-    return TRUE;
-} CATCH_TO_GERROR(FALSE)
+} CATCH_TO_GERROR(NULL)
 
 static gboolean
 context_modules_reset_or_disable(DnfContext * context, const char ** module_specs, GError ** error, bool reset)
