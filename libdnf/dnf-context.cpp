@@ -3480,6 +3480,9 @@ dnf_context_module_install(DnfContext * context, const char ** module_specs, GEr
                         std::vector<libdnf::ModuleProfile> profiles;
                         if (resolved_spec.first->getProfile() != "") {
                             profiles = modpkg->getProfiles(resolved_spec.first->getProfile());
+                            if (profiles.empty()) {
+                                throw std::runtime_error("No profile found matching " + resolved_spec.first->getProfile());
+                            }
                         } else {
                             profiles.push_back(modpkg->getDefaultProfile());
                         }
